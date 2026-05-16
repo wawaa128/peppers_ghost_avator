@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pepper's Ghost Avatar</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #000000;
+            display: flex;
+            width: 100vw;
+            height: 100vh;
+            /* 画面全体をあらかじめ左右反転！ハーフミラーに映った時にすべてが正像になります */
+            transform: scaleX(-1); 
+        }
+
+        /* マイク有効時に画面最上端に表示される細い赤い帯 */
+        #mic-indicator {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 6px; 
+            background-color: #ff3333; 
+            z-index: 9999; 
+            display: none; 
+            box-shadow: 0 0 12px rgba(255, 51, 51, 0.8);
+            animation: pulse 1.0s infinite alternate;
+        }
+
+        /* 【左半分】文字表示・UIエリア */
+        #ui-panel {
+            width: 50vw;
+            height: 100vh;
+            box-sizing: border-box;
+            background-color: #000000;
+            z-index: 100;
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            position: relative;
+        }
+
+        #start-btn {
+            position: absolute;
+            top: 30px;
+            left: 60px;
+            padding: 15px 30px;
+            font-size: 20px;
+            font-weight: bold;
+            background-color: #00ffcc;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(0, 255, 204, 0.3);
+            z-index: 110;
+        }
+
+        /* 会話ログコンテナ：縦2枚分（100vh全体） */
+        #chat-log {
+            width: 100%;
+            height: 100vh;
+            box-sizing: border-box;
+            padding: 60px;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end; 
+            overflow-y: auto;
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        #chat-log::-webkit-scrollbar { display: none; }
+
+        /* ユーザーの音声認識結果（56px・真っ白） */
+        .msg-user { 
+            font-size: 56px; 
+            font-weight: bold;
+            color: #ffffff; 
+            line-height: 1.3;
+            margin-bottom: 30px;
+            width: 100%;
+        }
+
+        /* AIの回答・読み上げテキスト（超巨大・ネオンエメラルド） */
+        .msg-ai { 
+            font-size: 72px; 
+            font-weight: 900; 
+            color: #00ffcc;
+            line-height: 1.4;
+            text-shadow: 0 0 20px rgba(0, 255, 204, 0.6);
+            word-break: break-all;
+            margin-bottom: 40px;
+            width: 100%;
+        }
+
+        /* 音声の入力待ち・初期待機表示（48px・シアン明滅） */
+        .msg-status {
+            font-size: 48px;
+            font-weight: bold;
+            color: #00cccc;
+            margin-bottom: 40px;
+            width: 100%;
+            animation: pulse 1.0s infinite alternate; 
+        }
+
+        /* 点滅アニメーションキーフレーム */
+        @keyframes pulse {
+            0% { opacity: 0.3; }
+            100% { opacity: 1.0; }
+        }
+
+        /* 【右半分】アバター投影エリア */
+        #canvas-container {
+            width: 50vw;
+            height: 100vh;
+            position: relative;
+            background-color: #000000;
+        }
+        canvas {
+            width: 100% !important;
+            height: 100% !important;
+        }
+
+        /* リアルタイム調整用CSSフィルターのベース */
+        .avatar-filter-target {
+            filter: brightness(0.7) contrast(1.5) saturate(3.0);
+        }
+
+        /* オプション設定画面（オーバーレイ） */
+        #options-overlay {
+            position: absolute;
+            top: 10vh;
+            left: 10vw;
+            width: 80vw;
+            height: 80vh;
+            background: rgba(15, 15, 20, 0.95);
+            border: 2px solid #00ffcc;
+            box-shadow: 0 0 30px rgba(0, 255, 204, 0.4);
+            border-radius: 12px;
+            z-index: 10000;
+            display: none; 
+            color: white;
+            font-family: sans-serif;
+            box-sizing: border-box;
+            padding: 40px;
+        }
+
+        /* 画面が正像(反転OFF)の時は、文字入力時にオプションボード自体が逆を向かないよう、鏡像の鏡像で相殺する */
+        body:not([style*="scaleX(-1)"]) #options-overlay {
+            transform: none;
+        }
+
+        .options-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 40px;
+            height: 90%;
+        }
+
+        .options-section {
+            background: rgba(255,255,255,0.03);
+            padding: 20px;
+            border-radius: 8px;
+            border: 1px solid rgba(0,255,204,0.1);
+            overflow-y: auto;
+        }
+
+        .options-section h3 {
+            margin-top: 0;
+            color: #00ffcc;
+            border-bottom: 1px solid rgba(0,255,204,0.2);
+            padding-bottom: 8px;
+            font-size: 22px;
+        }
+
+        .control-group {
+            margin-bottom: 18px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .control-group label {
+            font-size: 15px;
+            margin-bottom: 6px;
+            color: #aaa;
+        }
+
+        .control-row {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .control-row input[type="range"] {
+            flex-grow: 1;
+            accent-color: #00ffcc;
+        }
+
+        .control-row item-val {
+            width: 60px;
+            text-align: right;
+            font-family: monospace;
+            font-size: 16px;
+        }
+
+        select {
+            background: #222;
+            color: white;
+            border: 1px solid #00ffcc;
+            padding: 8px;
+            border-radius: 4px;
+            font-size: 16px;
+            width: 100%;
+        }
+
+        .esc-hint {
+            text-align: center;
+            color: #666;
+            font-size: 14px;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div id="mic-indicator"></div>
+
+    <div id="ui-panel">
+        <button id="start-btn">システム起動（またはスペースキー）</button>
+        <div id="chat-log">
+            <div class="msg-status" id="system-status">アバターモデルを読み込んでいます...</div>
+        </div>
+    </div>
+
+    <div id="canvas-container" class="avatar-filter-target"></div>
+
+    <div id="options-overlay">
+        <h2 style="margin-top:0; color:#00ffcc; text-align:center; font-size:28px;">SYSTEM OPTIONS</h2>
+        <div class="options-grid">
+            
+            <div class="options-section">
+                <h3>Visual & Fitting</h3>
+                
+                <div class="control-group" style="margin-bottom: 25px; border-bottom: 1px solid rgba(0,255,204,0.15); padding-bottom: 15px;">
+                    <label style="color:#00ffcc; font-weight: bold; font-size: 16px;">画面左右反転モード</label>
+                    <select id="param-mirror">
+                        <option value="true" selected>反転 ON </option>
+                        <option value="false">反転 OFF </option>
+                    </select>
+                </div>
+                
+                <div class="control-group">
+                    <label>明るさ (Brightness)</label>
+                    <div class="control-row">
+                        <input type="range" id="param-bright" min="0.3" max="1.5" step="0.05" value="0.7">
+                        <item-val id="val-bright">0.7</item-val>
+                    </div>
+                </div>
+                <div class="control-group">
+                    <label>コントラスト (Contrast)</label>
+                    <div class="control-row">
+                        <input type="range" id="param-contrast" min="0.5" max="2.5" step="0.05" value="1.5">
+                        <item-val id="val-contrast">1.5</item-val>
+                    </div>
+                </div>
+                <div class="control-group">
+                    <label>彩度 (Saturate)</label>
+                    <div class="control-row">
+                        <input type="range" id="param-saturate" min="0.5" max="4.0" step="0.1" value="3.0">
+                        <item-val id="val-saturate">3.0</item-val>
+                    </div>
+                </div>
+
+                <div class="control-group" style="margin-top: 25px;">
+                    <label>実機位置調整 (X Axis)</label>
+                    <div class="control-row">
+                        <input type="range" id="param-vrm-x" min="-1.0" max="1.0" step="0.02" value="0.0">
+                        <item-val id="val-vrm-x">0.00</item-val>
+                    </div>
+                </div>
+                <div class="control-group">
+                    <label>実機位置調整 (Y Axis)</label>
+                    <div class="control-row">
+                        <input type="range" id="param-vrm-y" min="-1.0" max="1.0" step="0.02" value="-0.15">
+                        <item-val id="val-vrm-y">-0.15</item-val>
+                    </div>
+                </div>
+                <div class="control-group">
+                    <label>アバター全高スケール (Scale)</label>
+                    <div class="control-row">
+                        <input type="range" id="param-vrm-scale" min="0.5" max="2.0" step="0.02" value="1.18">
+                        <item-val id="val-vrm-scale">1.18</item-val>
+                    </div>
+                </div>
+            </div>
+
+            <div class="options-section">
+                <h3>Voice Synthesis (edge-tts)</h3>
+                
+                <div class="control-group">
+                    <label>話速 (Rate)</label>
+                    <div class="control-row">
+                        <input type="range" id="param-rate" min="0" max="100" step="5" value="50">
+                        <item-val id="val-rate">+50%</item-val>
+                    </div>
+                </div>
+                <div class="control-group">
+                    <label>ピッチ (Pitch)</label>
+                    <div class="control-row">
+                        <input type="range" id="param-pitch" min="0" max="50" step="5" value="30">
+                        <item-val id="val-pitch">+30Hz</item-val>
+                    </div>
+                </div>
+                <div class="control-group">
+                    <label>キャラクター声色 (Voice)</label>
+                    <select id="param-voice">
+                        <option value="ja-JP-NanamiNeural" selected>Nanami (女性・標準)</option>
+                        <option value="ja-JP-KeitaNeural">Keita (男性・標準)</option>
+                        <option value="ja-JP-AoiNeural">Aoi (女性・自然)</option>
+                        <option value="ja-JP-DaichiNeural">Daichi (男性・自然)</option>
+                    </select>
+                </div>
+                
+                <div style="margin-top:40px; text-align:center; color:#666; font-size:14px; line-height:1.6;">
+                    【操作ヘルプ】<br>
+                    ビジュアル・配置項目はリアルタイムに変形します。<br>
+                    音声項目は、変更後に話しかけた文から適用されます。
+                </div>
+            </div>
+        </div>
+        <div class="esc-hint">【Esc】キーを押すと、設定を閉じて対話に戻ります</div>
+    </div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.154.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.154.0/examples/jsm/",
+                "@pixiv/three-vrm": "https://unpkg.com/@pixiv/three-vrm@2.0.0/lib/three-vrm.module.js"
+            }
+        }
+    </script>
+    
+    <script type="module">
+        import * as THREE from 'three';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+        import { VRMLoaderPlugin } from '@pixiv/three-vrm';
+
+        // --- 1. Three.js セットアップ ---
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        
+        let width = container.clientWidth;
+        let height = container.clientHeight;
+        
+        const camera = new THREE.PerspectiveCamera(28, width / height, 0.1, 20.0);
+        camera.position.set(0.0, 1.2, 3.0); 
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(width, height);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        container.appendChild(renderer.domElement);
+
+        const ambientLight = new THREE.AmbientLight(0xffeedd, 1.0); 
+        scene.add(ambientLight);
+        const directionalLight = new THREE.DirectionalLight(0xfffbea, 1.0); 
+        directionalLight.position.set(1.0, 1.0, 1.0).normalize();
+        scene.add(directionalLight);
+
+        // --- 2. VRMモデルの読み込み ---
+        let currentVrm = undefined;
+        let isSpeaking = false; 
+        const loader = new GLTFLoader();
+        loader.register((parser) => new VRMLoaderPlugin(parser));
+        
+        const vrmPath = './7151938431140058353.vrm'; 
+
+        loader.load(vrmPath, (gltf) => {
+            const vrm = gltf.userData.vrm;
+            scene.add(vrm.scene);
+            currentVrm = vrm;
+            vrm.scene.rotation.y = Math.PI; 
+            vrm.scene.position.x = 0.0; 
+            
+            vrm.scene.scale.set(1.18, 1.18, 1.18); 
+            vrm.scene.position.y = -0.15; 
+            
+            document.getElementById('system-status').innerText = "システム起動準備完了（スペースキーを叩いてください）";
+        });
+
+        // --- 3. アニメーションループ ---
+        const clock = new THREE.Clock();
+        let blinkTimer = 0;
+        let nextBlinkTime = 3.0; 
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const deltaTime = clock.getDelta();
+            const elapsedTime = clock.getElapsedTime();
+            const t = elapsedTime; 
+            
+            if (currentVrm) {
+                currentVrm.update(deltaTime);
+
+                // ① 待機モーション（呼吸）
+                const spine = currentVrm.humanoid.getNormalizedBoneNode('spine');
+                if (spine) {
+                    spine.rotation.x = Math.sin(t * 2.5) * 0.01 + 0.01;
+                }
+                const head = currentVrm.humanoid.getNormalizedBoneNode('head');
+                if (head) {
+                    head.rotation.y = Math.sin(t * 0.5) * 0.02;
+                }
+                
+                const baseY = parseFloat(document.getElementById('param-vrm-y').value);
+                currentVrm.scene.position.y = baseY + Math.sin(t * 2.5) * 0.005;
+
+                // ② 自動まばたき
+                blinkTimer += deltaTime;
+                if (blinkTimer >= nextBlinkTime) {
+                    const blinkDuration = 0.2;
+                    const progress = blinkTimer - nextBlinkTime;
+
+                    if (progress < blinkDuration) {
+                        const blinkVal = Math.sin((progress / blinkDuration) * Math.PI);
+                        currentVrm.expressionManager.setValue('blink', blinkVal);
+                    } else {
+                        currentVrm.expressionManager.setValue('blink', 0);
+                        blinkTimer = 0;
+                        nextBlinkTime = 2.0 + Math.random() * 3.0;
+                    }
+                }
+
+                // ③ リアルタイム口パク
+                if (isSpeaking && currentVrm.expressionManager) {
+                    const mouthOpen = Math.sin(t * 15) * 0.4 + 0.4; 
+                    currentVrm.expressionManager.setValue('aa', mouthOpen);
+                } else if (currentVrm.expressionManager) {
+                    currentVrm.expressionManager.setValue('aa', 0);
+                }
+
+                // ④ 自然な立ちポーズ ＆ ランダム風味な腕の揺れ
+                const leftUpperArm = currentVrm.humanoid.getNormalizedBoneNode('leftUpperArm');
+                if (leftUpperArm) {
+                    leftUpperArm.rotation.z = 1.3 + Math.sin(t * 1.5) * 0.02 + Math.cos(t * 0.7) * 0.01;
+                    leftUpperArm.rotation.x = 0.1 + Math.sin(t * 0.9) * 0.015;
+                }
+                const rightUpperArm = currentVrm.humanoid.getNormalizedBoneNode('rightUpperArm');
+                if (rightUpperArm) {
+                    rightUpperArm.rotation.z = -1.3 + Math.sin(t * 1.6) * 0.02 + Math.cos(t * 0.8) * 0.01;
+                    rightUpperArm.rotation.x = 0.1 + Math.sin(t * 1.0) * 0.015;
+                }
+                const leftLowerArm = currentVrm.humanoid.getNormalizedBoneNode('leftLowerArm');
+                if (leftLowerArm) {
+                    leftLowerArm.rotation.y = -1.0 + Math.cos(t * 1.3) * 0.03 + Math.sin(t * 0.6) * 0.015;
+                }
+                const rightLowerArm = currentVrm.humanoid.getNormalizedBoneNode('rightLowerArm');
+                if (rightLowerArm) {
+                    rightLowerArm.rotation.y = 1.0 + Math.cos(t * 1.4) * 0.03 + Math.sin(t * 0.5) * 0.015;
+                }
+            }
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        // --- 4. 音声認識 (STT) & オーディオ再生システム ---
+        const ws = new WebSocket('ws://localhost:8000/ws');
+        let audioCtx = null;
+        let audioQueue = [];        
+        let isPlayingAudio = false;  
+        
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        const recognition = new SpeechRecognition();
+        recognition.lang = 'ja-JP';
+        recognition.interimResults = false; 
+        recognition.continuous = false;     
+
+        const startBtn = document.getElementById('start-btn');
+        const chatLog = document.getElementById('chat-log');
+        const micIndicator = document.getElementById('mic-indicator'); 
+        const optionsOverlay = document.getElementById('options-overlay');
+
+        let isRecognitionActive = false; 
+        let isAiTurn = false; 
+        let isStarted = false; 
+        let isOptionsOpen = false; 
+
+        function activateSystem() {
+            if (startBtn.disabled) return;
+            startBtn.disabled = true;
+            startBtn.style.display = 'none'; 
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            
+            isStarted = true;
+            chatLog.innerHTML = "";
+            appendMessage('status', "何か 話しかけてください...");
+            
+            // 💡 追加：起動前にオプション画面でカスタムした設定値を、起動時に即座にサーバーに同期する
+            sendSettingsToServer();
+            
+            isAiTurn = false; 
+            startListening();
+        }
+
+        startBtn.addEventListener('click', activateSystem);
+
+        window.addEventListener('keydown', (event) => {
+            if (event.code === 'Space' && !isStarted) {
+                event.preventDefault(); 
+                activateSystem();
+            }
+            
+            // 💡 修正：`&& isStarted` 条件を削除。ロード直後（起動前）でもEscキーでオプションボードが開閉可能に！
+            if (event.code === 'Escape') {
+                event.preventDefault();
+                toggleOptionsWindow();
+            }
+        });
+
+        function toggleOptionsWindow() {
+            if (!isOptionsOpen) {
+                isOptionsOpen = true;
+                optionsOverlay.style.display = 'block';
+                try { recognition.stop(); } catch(e){}
+                isRecognitionActive = false;
+                micIndicator.style.display = 'none';
+            } else {
+                isOptionsOpen = false;
+                optionsOverlay.style.display = 'none';
+                
+                sendSettingsToServer();
+                startListening();
+            }
+        }
+
+        function sendSettingsToServer() {
+            // 💡 安全弁：起動前（WebSocketがまだ接続確立していない状態）のフライング送信によるクラッシュをブロック
+            if (ws.readyState !== WebSocket.OPEN) return;
+
+            const vRate = (parseInt(document.getElementById('param-rate').value) >= 0 ? "+" : "") + document.getElementById('param-rate').value + "%";
+            const vPitch = (parseInt(document.getElementById('param-pitch').value) >= 0 ? "+" : "") + document.getElementById('param-pitch').value + "Hz";
+            const vVoice = document.getElementById('param-voice').value;
+
+            ws.send(JSON.stringify({
+                type: "settings",
+                voice: vVoice,
+                rate: vRate,
+                pitch: vPitch
+            }));
+        }
+
+        function appendMessage(role, text) {
+            if (!isStarted && role !== 'status') return null;
+            
+            const msgDiv = document.createElement('div');
+            if (role === 'user') msgDiv.className = 'msg-user';
+            else if (role === 'ai') msgDiv.className = 'msg-ai';
+            else if (role === 'status') msgDiv.className = 'msg-status'; 
+            
+            msgDiv.innerText = text;
+            chatLog.appendChild(msgDiv);
+            
+            chatLog.scrollTop = chatLog.scrollHeight;
+            return msgDiv; 
+        }
+
+        function startListening() {
+            if (!isStarted || isSpeaking || isRecognitionActive || isAiTurn || isOptionsOpen) return;
+            
+            setTimeout(() => {
+                if (!isStarted || isSpeaking || isRecognitionActive || isAiTurn || isOptionsOpen) return;
+                try {
+                    recognition.start();
+                } catch (e) { console.log("認識起動スキップ:", e); }
+            }, 300);
+        }
+
+        recognition.onstart = () => {
+            if (!isStarted || isOptionsOpen) {
+                try { recognition.stop(); } catch(e){}
+                return;
+            }
+            isRecognitionActive = true;
+            micIndicator.style.display = 'block'; 
+        };
+
+        recognition.onresult = (event) => {
+            if (!isStarted || isOptionsOpen) return;
+            const speechText = event.results[0][0].transcript;
+            appendMessage('user', `あなた: ${speechText}`);
+            
+            isAiTurn = true; 
+            try { recognition.stop(); } catch(e){}
+            isRecognitionActive = false;
+            micIndicator.style.display = 'none'; 
+
+            ws.send(JSON.stringify({
+                type: "text",
+                text: speechText
+            }));
+        };
+
+        recognition.onerror = (event) => {
+            console.log("音声認識エラー:", event.error);
+            isRecognitionActive = false;
+            micIndicator.style.display = 'none';
+        };
+
+        recognition.onend = () => {
+            isRecognitionActive = false;
+            micIndicator.style.display = 'none'; 
+            if (isStarted && !isAiTurn && !isSpeaking && !isOptionsOpen) startListening();
+        };
+
+        ws.onmessage = async (event) => {
+            if (!isStarted) return;
+            
+            const msg = JSON.parse(event.data);
+            
+            if (msg.type === "audio") {
+                audioQueue.push({
+                    bufferArray: bytesToBuffer(msg.audio),
+                    text: msg.text
+                });
+                
+                if (!isPlayingAudio) playNextInQueue();
+            }
+        };
+
+        function bytesToBuffer(base64Str) {
+            const binaryString = window.atob(base64Str);
+            const len = binaryString.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            return bytes.buffer;
+        }
+
+        async function playNextInQueue() {
+            if (!isStarted) return;
+            
+            if (audioQueue.length === 0) {
+                isPlayingAudio = false;
+                isSpeaking = false; 
+                isAiTurn = false; 
+                
+                appendMessage('status', "何か 話しかけてください...");
+                startListening(); 
+                return;
+            }
+            
+            isPlayingAudio = true;
+            isSpeaking = true; 
+            
+            const currentItem = audioQueue.shift();
+            appendMessage('ai', currentItem.text);
+
+            try {
+                const audioBuffer = await audioCtx.decodeAudioData(currentItem.bufferArray);
+                const source = audioCtx.createBufferSource();
+                source.buffer = audioBuffer;
+                source.connect(audioCtx.destination);
+                
+                source.onended = () => {
+                    playNextInQueue();
+                };
+                source.start(0);
+            } catch (e) {
+                console.error("再生エラー:", e);
+                playNextInQueue();
+            }
+        }
+
+        // --- 6. オプションUI操作の同期イベント群 ---
+        const filterContainer = document.querySelector('.avatar-filter-target');
+        
+        const pBright = document.getElementById('param-bright');
+        const pContrast = document.getElementById('param-contrast');
+        const pSaturate = document.getElementById('param-saturate');
+        
+        function updateCSSFilters() {
+            document.getElementById('val-bright').innerText = pBright.value;
+            document.getElementById('val-contrast').innerText = pContrast.value;
+            document.getElementById('val-saturate').innerText = pSaturate.value;
+            
+            filterContainer.style.filter = `brightness(${pBright.value}) contrast(${pContrast.value}) saturate(${pSaturate.value})`;
+        }
+        pBright.addEventListener('input', updateCSSFilters);
+        pContrast.addEventListener('input', updateCSSFilters);
+        pSaturate.addEventListener('input', updateCSSFilters);
+
+        const pVrmX = document.getElementById('param-vrm-x');
+        const pVrmY = document.getElementById('param-vrm-y');
+        const pVrmScale = document.getElementById('param-vrm-scale');
+
+        pVrmX.addEventListener('input', (e) => {
+            const val = parseFloat(e.target.value);
+            document.getElementById('val-vrm-x').innerText = val.toFixed(2);
+            if (currentVrm) currentVrm.scene.position.x = val;
+        });
+        pVrmY.addEventListener('input', (e) => {
+            const val = parseFloat(e.target.value);
+            document.getElementById('val-vrm-y').innerText = val.toFixed(2);
+        });
+        pVrmScale.addEventListener('input', (e) => {
+            const val = parseFloat(e.target.value);
+            document.getElementById('val-vrm-scale').innerText = val.toFixed(2);
+            if (currentVrm) currentVrm.scene.scale.set(val, val, val);
+        });
+
+        const pMirror = document.getElementById('param-mirror');
+        pMirror.addEventListener('change', (e) => {
+            if (e.target.value === 'true') {
+                document.body.style.transform = 'scaleX(-1)';
+            } else {
+                document.body.style.transform = 'none';
+            }
+        });
+
+        document.getElementById('param-rate').addEventListener('input', (e) => {
+            document.getElementById('val-rate').innerText = (parseInt(e.target.value) >= 0 ? "+" : "") + e.target.value + "%";
+        });
+        
+        document.getElementById('param-pitch').addEventListener('input', (e) => {
+            document.getElementById('val-pitch').innerText = (parseInt(e.target.value) >= 0 ? "+" : "") + e.target.value + "Hz";
+        });
+
+        window.addEventListener('resize', () => {
+            width = container.clientWidth;
+            height = container.clientHeight;
+            camera.aspect = width / height;
+            camera.updateProjectionMatrix();
+            renderer.setSize(width, height);
+        });
+    </script>
+</body>
+</html>
