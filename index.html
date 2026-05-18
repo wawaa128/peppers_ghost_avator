@@ -84,7 +84,7 @@
 
         /* AIの回答・読み上げテキスト（超巨大・ネオンエメラルド） */
         .msg-ai { 
-            font-size: 72px; 
+            font-size: 50px; 
             font-weight: 900; 
             color: #00ffcc;
             line-height: 1.4;
@@ -372,7 +372,7 @@
         const loader = new GLTFLoader();
         loader.register((parser) => new VRMLoaderPlugin(parser));
         
-        const vrmPath = './7151938431140058353.vrm'; 
+        const vrmPath = './a.vrm'; 
 
         loader.load(vrmPath, (gltf) => {
             const vrm = gltf.userData.vrm;
