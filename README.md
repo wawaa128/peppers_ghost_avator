@@ -80,7 +80,7 @@ python server.py
 1. **Google Chrome** を起動します（Web Speech APIを使用するためChrome必須）。
 2. アドレスバーに以下のURLを入力してアクセスします。
    ```text
-   http://localhost:8000/static/index.html
+   http://localhost:8000/index.html
    ```
 3. 画面中央の下部に**「システム起動準備完了（スペースキーを叩いてください）」**と1秒周期でじわじわ明滅表示されるまで待ちます。
 4. **【Space】キー**（または画面内のエメラルド色の起動ボタン）を押します。
