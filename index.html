@@ -372,7 +372,7 @@
         const loader = new GLTFLoader();
         loader.register((parser) => new VRMLoaderPlugin(parser));
         
-        const vrmPath = './a.vrm'; 
+        const vrmPath = './test.vrm'; 
 
         loader.load(vrmPath, (gltf) => {
             const vrm = gltf.userData.vrm;
