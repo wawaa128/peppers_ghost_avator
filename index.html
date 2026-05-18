@@ -407,46 +407,30 @@ function animate() {
         currentVrm.update(deltaTime);
 
         // ① 待機モーション（呼吸を少し複雑な波にして人間らしく）
-        const spine = currentVrm.humanoid.getNormalizedBoneNode('spine');
-        if (spine) {
-            // 2つの異なる速度の波を混ぜて、規則性を減らす
-            spine.rotation.x = Math.sin(t * 2.0) * 0.008 + Math.cos(t * 0.7) * 0.003 + 0.01;
-        }
+                const spine = currentVrm.humanoid.getNormalizedBoneNode('spine');
+                if (spine) {
+                    // 2つの異なる速度の波を混ぜて、機械的な規則性を減らすよ
+                    spine.rotation.x = Math.sin(t * 2.0) * 0.008 + Math.cos(t * 0.7) * 0.003 + 0.01;
+                }
 
-        // ② 自動まばたき（ここは今のままでOK）
-        blinkTimer += deltaTime;
-        if (blinkTimer >= nextBlinkTime) {
-            const blinkDuration = 0.2;
-            const progress = blinkTimer - nextBlinkTime;
-            if (progress < blinkDuration) {
-                const blinkVal = Math.sin((progress / blinkDuration) * Math.PI);
-                currentVrm.expressionManager.setValue('blink', blinkVal);
-            } else {
-                currentVrm.expressionManager.setValue('blink', 0);
-                blinkTimer = 0;
-                nextBlinkTime = 2.0 + Math.random() * 4.0;
-            }
-        }
+                // 🌟 新機能：視線をカメラに固定する（目が合うギミック）
+                if (currentVrm.lookAt) {
+                    currentVrm.lookAt.lookAt(camera.position);
+                }
 
-        // ★新機能：視線をカメラに固定する（目が合うギミック）
-        // アバターの lookAt コンポーネントにカメラの位置を教える
-        if (currentVrm.lookAt) {
-            currentVrm.lookAt.lookAt(camera.position);
-        }
-
-        // ★新機能：たまに首を小さく動かす（きょろきょろ、うなずき）
-        lookAtTimer += deltaTime;
-        if (lookAtTimer > 2.5) { // 2.5秒ごとに次の首の角度をランダム決定
-            targetNeckX = (Math.random() - 0.5) * 0.05; // 上下の微細な動き
-            targetNeckY = (Math.random() - 0.5) * 0.08; // 左右の微細な動き
-            lookAtTimer = 0;
-        }
-        const neck = currentVrm.humanoid.getNormalizedBoneNode('neck');
-        if (neck) {
-            // イージング（滑らかに目標の角度へ近づける）
-            neck.rotation.x += (targetNeckX - neck.rotation.x) * 0.05;
-            neck.rotation.y += (targetNeckY - neck.rotation.y) * 0.05;
-        }
+                // 🌟 新機能：たまに首を小さく動かす（きょろきょろ、自然なゆらぎ）
+                lookAtTimer += deltaTime;
+                if (lookAtTimer > 2.5) { // 2.5秒ごとに次の首の角度をランダム決定
+                    targetNeckX = (Math.random() - 0.5) * 0.04; // 上下の微細な動き
+                    targetNeckY = (Math.random() - 0.5) * 0.06; // 左右の微細な動き
+                    lookAtTimer = 0;
+                }
+                const neck = currentVrm.humanoid.getNormalizedBoneNode('neck');
+                if (neck) {
+                    // イージング（目標の角度へ滑らかにじわっと近づける）
+                    neck.rotation.x += (targetNeckX - neck.rotation.x) * 0.05;
+                    neck.rotation.y += (targetNeckY - neck.rotation.y) * 0.05;
+                }
 
         // ③ リアルタイム口パク（今のままでOK）
         if (isSpeaking && currentVrm.expressionManager) {
